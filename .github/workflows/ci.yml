@@ -79,8 +79,8 @@ jobs:
       - name: Run large synthetic stress test
         run: |
           python3 - <<'PY'
-          vertices = 100_000
-          dangling = 1_000
+          vertices = 300_000
+          dangling = 3_000
           with open("large_synthetic_edges.csv", "w", encoding="utf-8") as out:
               out.write("from,to\n")
 
@@ -90,14 +90,14 @@ jobs:
                   out.write(f"{v},{v % vertices + 1}\n")
 
               # Детерминированные псевдослучайные ребра без зависимости от random.
-              # Это дает граф примерно на миллион ребер и делает тест воспроизводимым.
+              # Это дает несколько миллионов ребер и делает тест воспроизводимым.
               for v in range(1, vertices + 1):
-                  for k in range(8):
+                  for k in range(16):
                       to = ((v * 1103515245 + k * 12345) % vertices) + 1
                       out.write(f"{v},{to}\n")
 
               # Гипер-узел с большой исходящей степенью.
-              for to in range(2, 80_002):
+              for to in range(2, 250_002):
                   out.write(f"1,{to}\n")
 
               # Много входящих ребер в гипер-узел.
@@ -113,10 +113,11 @@ jobs:
           ./build/external_pagerank \
             --input large_synthetic_edges.csv \
             --output large_synthetic_pagerank.csv \
-            --iterations 8 \
+            --iterations 3 \
             --tolerance 1e-8 \
             --threads 4 \
-            --buckets 128
+            --buckets 256
 
+          ls -lh large_synthetic_edges.csv large_synthetic_pagerank.csv
           bash scripts/check_pagerank_output.sh large_synthetic_pagerank.csv
-          test "$(wc -l < large_synthetic_pagerank.csv)" -eq 101001
+          test "$(wc -l < large_synthetic_pagerank.csv)" -eq 303001
