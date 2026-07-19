@@ -348,14 +348,18 @@ size_t bucket_for_vertex(uint32_t vertex, size_t vertex_count, size_t bucket_cou
     return static_cast<size_t>((static_cast<uint64_t>(vertex) * bucket_count) / vertex_count);
 }
 
+uint32_t ceil_div(size_t numerator, size_t denominator) {
+    return static_cast<uint32_t>((numerator + denominator - 1) / denominator);
+}
+
 // Левая граница диапазона dense-id, который обслуживает bucket.
 uint32_t bucket_begin(size_t bucket, size_t vertex_count, size_t bucket_count) {
-    return static_cast<uint32_t>((vertex_count * bucket) / bucket_count);
+    return ceil_div(vertex_count * bucket, bucket_count);
 }
 
 // Правая граница диапазона dense-id, который обслуживает bucket. Граница не включается.
 uint32_t bucket_end(size_t bucket, size_t vertex_count, size_t bucket_count) {
-    return static_cast<uint32_t>((vertex_count * (bucket + 1)) / bucket_count);
+    return ceil_div(vertex_count * (bucket + 1), bucket_count);
 }
 
 uint64_t build_edge_buckets(const Config &config,
