@@ -32,3 +32,101 @@ jobs:
           test -s pagerank.csv
           head -n 1 pagerank.csv | grep -q '^vertex,rank$'
           awk -F, 'NR > 1 { sum += $2; if ($2 < 0) bad = 1 } END { if (bad || sum < 0.999999 || sum > 1.000001) exit 1 }' pagerank.csv
+
+      - name: Run edge-case smoke tests
+        run: |
+          check_output() {
+            local file="$1"
+            test -s "$file"
+            head -n 1 "$file" | grep -q '^vertex,rank$'
+            awk -F, 'NR > 1 { rows += 1; sum += $2; if ($2 < 0) bad = 1 } END { if (rows == 0 || bad || sum < 0.999999 || sum > 1.000001) exit 1 }' "$file"
+          }
+
+          ./build/external_pagerank --input examples/dangling.csv --output dangling_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 16
+          check_output dangling_pagerank.csv
+
+          ./build/external_pagerank --input examples/no_header.csv --output no_header_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 3
+          check_output no_header_pagerank.csv
+
+          ./build/external_pagerank --input examples/extra_columns.csv --output extra_columns_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 32
+          check_output extra_columns_pagerank.csv
+
+      - name: Run synthetic larger test
+        run: |
+          python3 - <<'PY'
+          vertices = 5000
+          with open("synthetic_edges.csv", "w", encoding="utf-8") as out:
+              out.write("from,to\n")
+
+              # Основной цикл дает связную часть графа.
+              for v in range(1, vertices + 1):
+                  out.write(f"{v},{v % vertices + 1}\n")
+
+              # Гипер-узел с большой исходящей степенью.
+              for to in range(2, 3002):
+                  out.write(f"1,{to}\n")
+
+              # Несколько обратных ссылок в гипер-узел.
+              for src in range(1000, 5001, 3):
+                  out.write(f"{src},1\n")
+
+              # Вершины 5001..5100 появляются только как to и становятся dangling.
+              for to in range(5001, 5101):
+                  out.write(f"{to - 5000},{to}\n")
+          PY
+
+          ./build/external_pagerank \
+            --input synthetic_edges.csv \
+            --output synthetic_pagerank.csv \
+            --iterations 30 \
+            --tolerance 1e-10 \
+            --threads 4 \
+            --buckets 64
+
+          check_output synthetic_pagerank.csv
+          test "$(wc -l < synthetic_pagerank.csv)" -eq 5101
+
+      - name: Run large synthetic stress test
+        run: |
+          python3 - <<'PY'
+          vertices = 100_000
+          dangling = 1_000
+          with open("large_synthetic_edges.csv", "w", encoding="utf-8") as out:
+              out.write("from,to\n")
+
+              # Все основные вершины входят в большой цикл, поэтому каждая из них
+              # точно присутствует в графе и имеет хотя бы одно исходящее ребро.
+              for v in range(1, vertices + 1):
+                  out.write(f"{v},{v % vertices + 1}\n")
+
+              # Детерминированные псевдослучайные ребра без зависимости от random.
+              # Это дает граф примерно на миллион ребер и делает тест воспроизводимым.
+              for v in range(1, vertices + 1):
+                  for k in range(8):
+                      to = ((v * 1103515245 + k * 12345) % vertices) + 1
+                      out.write(f"{v},{to}\n")
+
+              # Гипер-узел с большой исходящей степенью.
+              for to in range(2, 80_002):
+                  out.write(f"1,{to}\n")
+
+              # Много входящих ребер в гипер-узел.
+              for src in range(1, vertices + 1, 5):
+                  out.write(f"{src},1\n")
+
+              # Дополнительные вершины появляются только как to, значит они dangling.
+              for to in range(vertices + 1, vertices + dangling + 1):
+                  src = ((to - vertices) * 97) % vertices + 1
+                  out.write(f"{src},{to}\n")
+          PY
+
+          ./build/external_pagerank \
+            --input large_synthetic_edges.csv \
+            --output large_synthetic_pagerank.csv \
+            --iterations 8 \
+            --tolerance 1e-8 \
+            --threads 4 \
+            --buckets 128
+
+          check_output large_synthetic_pagerank.csv
+          test "$(wc -l < large_synthetic_pagerank.csv)" -eq 101001
