@@ -28,28 +28,18 @@ jobs:
             --threads 2
 
       - name: Check output
-        run: |
-          test -s pagerank.csv
-          head -n 1 pagerank.csv | grep -q '^vertex,rank$'
-          awk -F, 'NR > 1 { sum += $2; if ($2 < 0) bad = 1 } END { if (bad || sum < 0.999999 || sum > 1.000001) exit 1 }' pagerank.csv
+        run: bash scripts/check_pagerank_output.sh pagerank.csv
 
       - name: Run edge-case smoke tests
         run: |
-          check_output() {
-            local file="$1"
-            test -s "$file"
-            head -n 1 "$file" | grep -q '^vertex,rank$'
-            awk -F, 'NR > 1 { rows += 1; sum += $2; if ($2 < 0) bad = 1 } END { if (rows == 0 || bad || sum < 0.999999 || sum > 1.000001) exit 1 }' "$file"
-          }
-
           ./build/external_pagerank --input examples/dangling.csv --output dangling_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 16
-          check_output dangling_pagerank.csv
+          bash scripts/check_pagerank_output.sh dangling_pagerank.csv
 
           ./build/external_pagerank --input examples/no_header.csv --output no_header_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 3
-          check_output no_header_pagerank.csv
+          bash scripts/check_pagerank_output.sh no_header_pagerank.csv
 
           ./build/external_pagerank --input examples/extra_columns.csv --output extra_columns_pagerank.csv --iterations 100 --tolerance 1e-12 --threads 2 --buckets 32
-          check_output extra_columns_pagerank.csv
+          bash scripts/check_pagerank_output.sh extra_columns_pagerank.csv
 
       - name: Run synthetic larger test
         run: |
@@ -83,7 +73,7 @@ jobs:
             --threads 4 \
             --buckets 64
 
-          check_output synthetic_pagerank.csv
+          bash scripts/check_pagerank_output.sh synthetic_pagerank.csv
           test "$(wc -l < synthetic_pagerank.csv)" -eq 5101
 
       - name: Run large synthetic stress test
@@ -128,5 +118,5 @@ jobs:
             --threads 4 \
             --buckets 128
 
-          check_output large_synthetic_pagerank.csv
+          bash scripts/check_pagerank_output.sh large_synthetic_pagerank.csv
           test "$(wc -l < large_synthetic_pagerank.csv)" -eq 101001
